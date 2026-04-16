@@ -78,6 +78,21 @@ docker compose down
 
 ---
 
+## 镜像离线分发（阿里云 OSS）
+
+仓库内已提供 GitHub Actions 工作流 `.github/workflows/export-image.yml`，可将 `openclaw.tar.gz` 上传到 OSS（国内下载更稳）。
+
+在 GitHub 仓库 `Settings -> Secrets and variables -> Actions` 中配置以下 Secrets：
+
+- `OSS_ACCESS_KEY_ID`
+- `OSS_ACCESS_KEY_SECRET`
+- `OSS_ENDPOINT`（例如 `oss-cn-hangzhou.aliyuncs.com`）
+- `OSS_BUCKET`（你的 Bucket 名称）
+
+执行 `Actions -> OpenClaw Docker 镜像导出 -> Run workflow` 后，日志会输出 OSS 下载链接。
+
+---
+
 ## 配置与备份
 
 - 修改 **`openclaw/openclaw.json5`** 或 **`.env`** 后执行：`docker compose up -d`。
