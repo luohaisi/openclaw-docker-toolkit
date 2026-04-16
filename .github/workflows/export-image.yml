@@ -1,0 +1,33 @@
+name: OpenClaw Docker 镜像导出
+
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: "Image name"
+        required: true
+        default: "ghcr.io/openclaw/openclaw"
+      tag:
+        description: "Image tag"
+        required: true
+        default: "2026.4.15-beta.1-slim"
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull image
+        run: |
+          docker pull "${{ inputs.image }}:${{ inputs.tag }}"
+
+      - name: Save to tar.gz
+        run: |
+          docker save "${{ inputs.image }}:${{ inputs.tag }}" -o openclaw.tar
+          gzip openclaw.tar
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openclaw-image-${{ inputs.tag }}
+          path: openclaw.tar.gz
+          retention-days: 5

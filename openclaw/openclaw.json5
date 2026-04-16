@@ -1,0 +1,61 @@
+{
+  // AI 模型提供商配置
+  providers: {
+    openrouter: {
+      baseUrl: "https://openrouter.ai/api/v1",
+      apiKey: "${OPENROUTER_API_KEY}",
+      api: "openai-completions",
+      models: [
+        {
+          id: "nvidia/nemotron-3-super-120b-a12b:free",
+          name: "nvidia/nemotron-3-super-120b-a12b:free (OpenRouter)",
+          api: "openai-completions",
+          reasoning: false,
+          input: [
+            "text",
+          ],
+          cost: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+          },
+          contextWindow: 262000,
+          maxTokens: 32768,
+        },
+      ],
+    },
+    "kimi-coding": {
+      baseUrl: "https://api.kimi.com/coding/",
+      api: "anthropic-messages",
+      models: [
+        {
+          id: "k2p5",
+          name: "Kimi for Coding",
+          reasoning: true,
+          input: [
+            "text",
+            "image",
+          ],
+          cost: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+          },
+          contextWindow: 262144,
+          maxTokens: 32768,
+        },
+      ],
+    },
+  },
+
+  // Gateway（与官方 Docker 一致：bind 使用 lan，勿写 0.0.0.0；端口由 compose command 传入）
+  gateway: {
+    port: 18789,
+    bind: "lan",
+  },
+
+  // 频道配置（按需启用）
+  channels: {}
+}
