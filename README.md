@@ -91,6 +91,8 @@ docker compose down
 
 执行 `Actions -> OpenClaw Docker 镜像导出 -> Run workflow` 后，日志会输出 OSS 下载链接。
 
+若工作流在 OSS 步骤失败且日志里出现 `wget` 退出码 `8`，通常是旧版从 `gosspublic.alicdn.com` 拉 `ossutil` 失败；当前工作流已改为从 [ossutil GitHub Releases](https://github.com/aliyun/ossutil/releases) 下载 Linux amd64 包。
+
 ---
 
 ## 配置与备份
