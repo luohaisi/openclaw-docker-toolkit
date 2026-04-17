@@ -2,3 +2,6 @@
 scripts/ossutil64
 scripts/.oss-test-upload.txt
 scripts/oss-local.env
+images/*.tar
+images/*.tar.gz
+images/*.tgz

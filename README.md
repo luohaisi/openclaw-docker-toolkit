@@ -1,129 +1,93 @@
 # OpenClaw Docker 部署工具包
 
-本仓库在 Docker 中运行 [OpenClaw](https://github.com/openclaw/openclaw) Gateway，**`docker-compose.yml` 与官方仓库结构对齐**（`openclaw-gateway` + `openclaw-cli`、健康检查、双卷挂载）。官方说明见：[Docker（中文）](https://docs.openclaw.ai/zh-CN/install/docker)、上游 [`docker-compose.yml`](https://github.com/openclaw/openclaw/blob/main/docker-compose.yml)、预构建镜像 [GHCR `openclaw`](https://github.com/openclaw/openclaw/pkgs/container/openclaw)。
+在 Docker 中运行 [OpenClaw](https://github.com/openclaw/openclaw) Gateway，`docker-compose.yml` 与[上游](https://github.com/openclaw/openclaw/blob/main/docker-compose.yml)对齐。官方文档：[Docker（中文）](https://docs.openclaw.ai/zh-CN/install/docker)。
 
-## 与官方一致的要点
+## 要点
 
-- **镜像**：默认 `OPENCLAW_IMAGE=ghcr.io/openclaw/openclaw:latest`（可在 `.env` 中改为固定版本或 `*-slim` 等标签）。
-- **数据目录**：`OPENCLAW_CONFIG_DIR` → 容器内 `/home/node/.openclaw`（含 `openclaw.json5`、智能体状态等）；`OPENCLAW_WORKSPACE_DIR` → `/home/node/.openclaw/workspace`。
-- **Gateway 启动参数**：`gateway --bind ${OPENCLAW_GATEWAY_BIND:-lan} --port 18789`。文档要求 **`gateway.bind` 使用 `lan` / `loopback` 等模式**，不要写成 `0.0.0.0` 这类主机别名；本仓库的 `openclaw/openclaw.json5` 中已使用 `bind: "lan"`。
-- **CLI**：`openclaw-cli` 使用 `network_mode: service:openclaw-gateway`，日常通过 `docker compose run --rm openclaw-cli …` 执行子命令（与官方一致）。
-- **健康检查**：`GET /healthz`、`/readyz`（参见官方文档）。
+- **网关配置**：只读取 **`openclaw/openclaw.json`**（不可用 `openclaw.json5` 作为唯一配置文件名，否则等同「无配置」）。须含 **`gateway.mode: "local"`**。模型与第三方 API 须写在当前 schema 允许的键下（例如 **`models.providers`**），根级 **`providers` 会被判为非法键而导致网关无法启动；见仓库内示例 `openclaw/openclaw.json`。
+- **镜像**：仅支持**离线包** `docker load` 后启动，不执行在线 `docker pull`（见下节）。
+- **数据**：`openclaw/` → 容器内 `~/.openclaw`；`workspace/` → `~/.openclaw/workspace`。
+- **Gateway**：`bind` 使用 `lan`（见 `openclaw/openclaw.json`），端口默认 18789/18790。安装脚本会按 `.env` 里的 `OPENCLAW_GATEWAY_PORT` **检测端口占用**并提示（含 WSL 里已跑 OpenClaw 时常出现冲突）；可先在 WSL 停服务，或改 `.env` 端口。
+- **后台运行**：`docker compose up -d` 后容器由 **Docker 守护进程**维护，**关掉安装脚本的窗口不会停止容器**。
+- **停止本项目**：双击 **`stop-openclaw.bat`**，或 PowerShell 执行 `.\stop-openclaw.ps1`（等同于 `docker compose down`，**不删** `openclaw/`、`workspace/` 数据）。**退出 Docker 全盘**：系统托盘右键 **Docker Desktop → Quit Docker Desktop**（会停掉所有用 Docker 的应用容器）。
 
-## 第三方教程（补充）
-
-图文步骤可参考：[OpenClaw Docker 部署完整教程](https://oepnclaw.com/tutorials/openclaw-docker-deploy.html)。其中旧式单容器、`./config` 挂载到 `/root/.config/openclaw` 的写法**已被本仓库弃用**，请以**官方文档 + 本仓库目录**为准。
-
----
-
-## 本仓库目录说明
+## 目录
 
 | 路径 | 说明 |
 |------|------|
-| `docker-compose.yml` | 官方风格：`openclaw-gateway`、`openclaw-cli`、健康检查、端口 18789/18790 |
-| `openclaw/` | 状态与主配置（对应容器内 `~/.openclaw`，主文件为 `openclaw.json5`） |
-| `workspace/` | 工作区（挂载到 `~/.openclaw/workspace`） |
-| `.env` | `OPENCLAW_*`、模型 API 等（**已加入 `.gitignore`，勿提交**） |
-| `setup-openclaw.bat` / `setup-openclaw.ps1` | Windows 一键创建目录、模板与 `docker compose up -d` |
+| `docker-compose.yml` | `openclaw-gateway` + `openclaw-cli` |
+| `openclaw/`、`workspace/` | 主配置为 **`openclaw/openclaw.json`**（不要用 `openclaw.json5` 作唯一文件名）；工作区挂载 |
+| `.env` | 密钥与变量（**勿提交**） |
+| `images/` | 放置离线镜像 `openclaw.tar.gz`（见 `.gitignore`） |
+| `setup-openclaw.bat` / `setup-openclaw.ps1` | 加载离线镜像并 `docker compose up -d` |
+| `restart-openclaw.bat` / `restart-openclaw.ps1` | 一键重启（执行 `docker compose up -d`） |
+| `stop-openclaw.bat` / `stop-openclaw.ps1` | 停止本项目的容器（`docker compose down`） |
+| `tui-openclaw.bat` / `tui-openclaw.ps1` | 一键启动 TUI（默认带 **`--deliver`**，避免无对话输出；仍可直接 `docker compose run ... tui` 自建参数） |
 
----
+## Windows 安装（离线镜像）
 
-## 本地执行方式
-
-### 方式一：Windows 一键脚本（推荐）
-
-1. 安装并**启动 Docker Desktop**。
-2. 进入本仓库根目录，**双击** `setup-openclaw.bat`，或执行：
+1. 安装并启动 **Docker Desktop**。
+2. 将导出的 **`openclaw-*.tar.gz`** 放到 **`images\openclaw.tar.gz`**，或仓库根目录 **`openclaw.tar.gz`**。
+3. 双击 **`setup-openclaw.bat`**，或：
 
    ```powershell
-   cd E:\Workspace\openclaw-docker-toolkit
+   cd <本仓库根目录>
    powershell -NoProfile -ExecutionPolicy Bypass -File .\setup-openclaw.ps1
    ```
 
-3. 编辑 **`.env`**：至少配置模型相关变量（与 `openclaw/openclaw.json5` 中 `${变量名}` 一致）；按需设置 **`OPENCLAW_GATEWAY_TOKEN`**（Control UI 鉴权，官方 setup 也会写入）。
+4. 自定义离线包路径：
 
-跳过拉取镜像仅启动：
+   ```powershell
+   .\setup-openclaw.ps1 -ImageArchive "D:\openclaw-xxx.tar.gz"
+   ```
+
+5. 编辑 **`.env`**：填写模型 API 等；把 **`OPENCLAW_IMAGE=`** 改成脚本输出的「已加载」镜像名。**`OPENCLAW_GATEWAY_TOKEN`** 若为空（含模板里被注释那一行），一键脚本会**自动生成**（仅字母、数字、连字符 `-`，避免 `+`/`=` 等被误截断）并 **UTF-8 带 BOM 保存**，便于记事本正确显示中文注释。终端会临时显示一次 Token。
+
+若 **`.env` 中文乱码**：用 VS Code / 记事本将文件 **另存为 UTF-8（带 BOM）**，或备份后删除 `.env` 重新运行一次安装脚本以从模板重建。
+
+手动启动（已 `docker load` 且 `.env` 中 `OPENCLAW_IMAGE` 正确）：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\setup-openclaw.ps1 -SkipPull
-```
-
-### 方式二：手动 Docker Compose
-
-```powershell
-docker compose pull
 docker compose up -d
-docker compose ps
 ```
 
----
+## 导出离线包并上传 OSS（可选）
+
+仓库提供 [`.github/workflows/export-image.yml`](.github/workflows/export-image.yml)：在 Actions 中配置 Secrets `OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`、`OSS_ENDPOINT`、`OSS_BUCKET`，手动运行 workflow 后从日志取 OSS 下载链接。本地验证上传见 `scripts/oss-local.env.example`。
 
 ## 常用命令
 
 ```powershell
-# Gateway 日志
 docker compose logs -f openclaw-gateway
-
-# 官方推荐：CLI 一次性容器（与网关同网络）
 docker compose run --rm openclaw-cli dashboard --no-open
-
-# 存活探测
-curl -fsS http://127.0.0.1:18789/healthz
-
-# 停止（不删除卷数据）
+docker compose run --rm -it openclaw-cli tui
+# 或一键：.\tui-openclaw.ps1（可跟参数：.\tui-openclaw.ps1 -- --help）
+# PowerShell 中请用 curl.exe（curl 会当成 Invoke-WebRequest）
+curl.exe -fsS http://127.0.0.1:18789/healthz
+# 或：irm http://127.0.0.1:18789/healthz
 docker compose down
+# 或一键：.\stop-openclaw.ps1
+# 重启（等同 up -d）
+# 或一键：.\restart-openclaw.ps1
 ```
 
-浏览器打开 Control UI：**<http://127.0.0.1:18789/>**。
-
----
-
-## 镜像离线分发（阿里云 OSS）
-
-仓库内已提供 GitHub Actions 工作流 `.github/workflows/export-image.yml`，可将 `openclaw.tar.gz` 上传到 OSS（国内下载更稳）。
-
-在 GitHub 仓库 `Settings -> Secrets and variables -> Actions` 中配置以下 Secrets：
-
-- `OSS_ACCESS_KEY_ID`
-- `OSS_ACCESS_KEY_SECRET`
-- `OSS_ENDPOINT`（例如 `oss-cn-hangzhou.aliyuncs.com`）
-- `OSS_BUCKET`（你的 Bucket 名称）
-
-执行 `Actions -> OpenClaw Docker 镜像导出 -> Run workflow` 后，日志会输出 OSS 下载链接。
-
-若工作流在下载 `ossutil` 时失败：
-
-- **`curl: (22) ... 404`**：`v1.7.19` 在 GitHub Release 上 **没有上传各平台 zip**（assets 为空），旧版脚本里拼出来的 `ossutil-v1.7.19-linux-amd64.zip` 会 404。当前工作流已改为 **`v1.7.18`**（该版本有完整 [Release 资源](https://github.com/aliyun/ossutil/releases)）。
-- **`wget` 退出码 `8`**：旧版用 `gosspublic.alicdn.com` 直链在 Actions 上常失败；已改为从 GitHub Releases 下载。
-
-### 发布前本地验证 OSS（推荐）
-
-1. 复制 `scripts/oss-local.env.example` 为 `scripts/oss-local.env`，填写 **`OSS_ENDPOINT`** 与 **`OSS_BUCKET`**（仅本地使用，已加入 `.gitignore`，不会提交）。
-2. 只在环境变量里保留 **`OSS_ACCESS_KEY_ID`**、**`OSS_ACCESS_KEY_SECRET`**（密钥不要写进 `oss-local.env`）。
-3. 在本机测试上传（与 CI 使用同一套 ossutil 版本）：
-
-- **Windows（PowerShell）**：`powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-oss-upload.ps1`
-- **Linux / WSL / Git Bash**：`bash scripts/test-oss-upload.sh`
-
-成功后再在 GitHub Actions 里跑完整导出。
-
----
+Control UI：<http://127.0.0.1:18789/>
 
 ## 配置与备份
 
-- 修改 **`openclaw/openclaw.json5`** 或 **`.env`** 后执行：`docker compose up -d`。
-- 备份建议打包 **`openclaw/`、`workspace/`、`.env`**（注意密钥）。
+修改 `openclaw/openclaw.json` 或 `.env` 后：`docker compose up -d`。备份建议打包 `openclaw/`、`workspace/`、`.env`。
 
----
+## 故障排查
 
-## 故障排查简要
+- **Control UI 提示 Token 无效**：`openclaw.json` 中 **`gateway.auth.token`** 须为 **`${OPENCLAW_GATEWAY_TOKEN}`**，与 **`.env` 唯一一致**；勿在 JSON 里另写死一串。改完后 `docker compose up -d`。
+- **TUI 只有 `HEARTBEAT_OK`、`/status` 正常**：官方说明默认 **未开启 delivery 时可能发出去但看不到助手回复**；在 TUI 内执行 **`/deliver on`**，或一键脚本已默认 **`--deliver`**。若仍无输出，查 Kimi/OpenRouter Key 与 `docker compose logs openclaw-gateway`。
+- **仓库里同时有 `workspace/` 与 `openclaw/workspace/`**：以根目录 **`workspace/`** 为准（compose 挂载），`openclaw/workspace/` 一般为误建或历史残留，可备份后删除以免混淆。
+- **网页聊天一直转圈，刷新后才出现回复**：多为 **流式输出结束时前端未收到/未处理「完成」事件**，后端其实已写完；可试无痕窗口、换浏览器、关广告拦截、看 F12 控制台与 Network → WS 是否报错；镜像可随上游更新。数据一般未丢，仅界面状态未刷新。
+- **Skills 放在哪**：会扫描的是**工作区下的 `skills/` 目录**（每个技能为子文件夹 + `SKILL.md`），即 **`workspace/skills/<技能名>/SKILL.md`**，不是零散丢在 `workspace/` 根目录。亦可用 `~/.openclaw/skills`（本仓库即 `openclaw/skills/`，若自行新建）。详见 [官方 Skills](https://docs.openclaw.ai/tools/skills)。
+- **浏览器打开 127.0.0.1:18789 白屏 / `curl` 连不上**：确认配置名为 **`openclaw/openclaw.json`**（不是 `openclaw.json5`）。用 `curl.exe -fsS http://127.0.0.1:18789/healthz` 或 `irm` 测试；再在 `gateway` 下配置 `controlUi.allowedOrigins`（见 `defaults/openclaw.default.json`），`docker compose up -d`。若提示未授权/需配对，见[官方说明](https://docs.openclaw.ai/install/docker#unauthorized-or-pairing-required-in-control-ui)。
+- **设备/API**：见[官方文档](https://docs.openclaw.ai/)。
+- **端口冲突**：改 `.env` 中 `OPENCLAW_GATEWAY_PORT` / `OPENCLAW_BRIDGE_PORT`。
 
-- **Unauthorized / 设备配对**：参见官方文档「故障排除」；可尝试 `docker compose run --rm openclaw-cli devices list` 等。
-- **API 报错**：核对 `.env` 与 `openclaw.json5` 中的 `${...}` 变量名是否一致。
-- **端口冲突**：修改 `.env` 中 `OPENCLAW_GATEWAY_PORT` / `OPENCLAW_BRIDGE_PORT`，并保证与 Gateway 配置一致。
+## 许可
 
----
-
-## 许可与上游
-
-OpenClaw 为开源项目，许可与更新见上游仓库与 [文档](https://docs.openclaw.ai/)。
+OpenClaw 上游见 [文档](https://docs.openclaw.ai/)。
