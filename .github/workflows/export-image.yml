@@ -44,11 +44,22 @@ jobs:
           curl -fsSL --retry 5 --retry-delay 2 \
             "https://github.com/aliyun/ossutil/releases/download/${OSSUTIL_VER}/ossutil-${OSSUTIL_VER}-linux-amd64.zip" \
             -o ossutil.zip
-          unzip -o -q ossutil.zip
-          chmod +x ossutil64
-          ./ossutil64 config -e "$OSS_ENDPOINT" -i "$OSS_ACCESS_KEY_ID" -k "$OSS_ACCESS_KEY_SECRET"
+          rm -rf ossutil-extract
+          mkdir -p ossutil-extract
+          unzip -o -q ossutil.zip -d ossutil-extract
+          OSSUTIL_BIN="$(find ossutil-extract -type f -name ossutil64 | head -1)"
+          if [ -z "$OSSUTIL_BIN" ]; then
+            OSSUTIL_BIN="$(find ossutil-extract -type f -name ossutil | head -1)"
+          fi
+          if [ -z "$OSSUTIL_BIN" ]; then
+            echo "ossutil binary not found after unzip; listing:" >&2
+            find ossutil-extract -type f >&2 || true
+            exit 1
+          fi
+          chmod +x "$OSSUTIL_BIN"
+          "$OSSUTIL_BIN" config -e "$OSS_ENDPOINT" -i "$OSS_ACCESS_KEY_ID" -k "$OSS_ACCESS_KEY_SECRET"
           OSS_OBJECT="docker-images/openclaw-${{ inputs.tag }}.tar.gz"
-          ./ossutil64 cp openclaw.tar.gz "oss://${OSS_BUCKET}/${OSS_OBJECT}"
+          "$OSSUTIL_BIN" cp openclaw.tar.gz "oss://${OSS_BUCKET}/${OSS_OBJECT}"
           echo "Download URL: https://${OSS_BUCKET}.${OSS_ENDPOINT}/${OSS_OBJECT}"
 
       - name: Upload artifact
