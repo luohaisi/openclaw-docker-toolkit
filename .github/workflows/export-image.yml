@@ -38,7 +38,9 @@ jobs:
             exit 1
           fi
           # 不要用 alicdn 直链 wget：Actions 上常返回 HTTP 错误（wget exit 8）
-          OSSUTIL_VER="v1.7.19"
+          # 注意：v1.7.19 在 GitHub Release 上 assets 为空，linux-amd64.zip 会 404，故固定用 v1.7.18
+          # 参见：https://github.com/aliyun/ossutil/releases
+          OSSUTIL_VER="v1.7.18"
           curl -fsSL --retry 5 --retry-delay 2 \
             "https://github.com/aliyun/ossutil/releases/download/${OSSUTIL_VER}/ossutil-${OSSUTIL_VER}-linux-amd64.zip" \
             -o ossutil.zip

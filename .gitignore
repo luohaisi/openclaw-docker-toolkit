@@ -1,1 +1,4 @@
 .env
+scripts/ossutil64
+scripts/.oss-test-upload.txt
+scripts/oss-local.env

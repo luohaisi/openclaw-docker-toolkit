@@ -91,7 +91,21 @@ docker compose down
 
 执行 `Actions -> OpenClaw Docker 镜像导出 -> Run workflow` 后，日志会输出 OSS 下载链接。
 
-若工作流在 OSS 步骤失败且日志里出现 `wget` 退出码 `8`，通常是旧版从 `gosspublic.alicdn.com` 拉 `ossutil` 失败；当前工作流已改为从 [ossutil GitHub Releases](https://github.com/aliyun/ossutil/releases) 下载 Linux amd64 包。
+若工作流在下载 `ossutil` 时失败：
+
+- **`curl: (22) ... 404`**：`v1.7.19` 在 GitHub Release 上 **没有上传各平台 zip**（assets 为空），旧版脚本里拼出来的 `ossutil-v1.7.19-linux-amd64.zip` 会 404。当前工作流已改为 **`v1.7.18`**（该版本有完整 [Release 资源](https://github.com/aliyun/ossutil/releases)）。
+- **`wget` 退出码 `8`**：旧版用 `gosspublic.alicdn.com` 直链在 Actions 上常失败；已改为从 GitHub Releases 下载。
+
+### 发布前本地验证 OSS（推荐）
+
+1. 复制 `scripts/oss-local.env.example` 为 `scripts/oss-local.env`，填写 **`OSS_ENDPOINT`** 与 **`OSS_BUCKET`**（仅本地使用，已加入 `.gitignore`，不会提交）。
+2. 只在环境变量里保留 **`OSS_ACCESS_KEY_ID`**、**`OSS_ACCESS_KEY_SECRET`**（密钥不要写进 `oss-local.env`）。
+3. 在本机测试上传（与 CI 使用同一套 ossutil 版本）：
+
+- **Windows（PowerShell）**：`powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-oss-upload.ps1`
+- **Linux / WSL / Git Bash**：`bash scripts/test-oss-upload.sh`
+
+成功后再在 GitHub Actions 里跑完整导出。
 
 ---
 
