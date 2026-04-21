@@ -1,85 +1,123 @@
-# OpenClaw Docker 工具包 — 协作备忘（Claude / AI 速览）
+# OpenClaw Docker 工具包 — 离线优先协作备忘
 
-本文档提炼本仓库的**关键事实**与**已踩坑及对策**，便于延续上下文。详细步骤以 `README.md` 为准。
-
----
-
-## 1. 项目是什么
-
-- 用 **Docker Compose** 在本地跑 [OpenClaw](https://github.com/openclaw/openclaw) **Gateway**，`docker-compose.yml` 对齐上游（`openclaw-gateway` + `openclaw-cli`、`network_mode: service:openclaw-gateway`、健康检查）。
-- **本仓库刻意不走在线 `docker pull`**：安装脚本只做 `docker load` 离线包 + `docker compose up -d`，适合网络差或内网分发。
-- **镜像来源**：自行在 GitHub Actions（`.github/workflows/export-image.yml`）导出并可选上传阿里云 OSS；镜像名/tag 与 workflow 输入一致（如 `ghcr.io/openclaw/openclaw:2026.x.x-slim`）。
+本文档用于 AI/协作者快速对齐仓库原则。  
+目标只有一个：**尽量离线安装 Docker OpenClaw 环境**。  
+用户文档以 `README.md` 为准；本文件强调“决策与约束”。
 
 ---
 
-## 2. 关键路径与约定
+## 1) 项目宗旨（必须优先满足）
 
-| 项 | 说明 |
-|----|------|
-| 离线包位置 | `images/openclaw.tar.gz` 或根目录 `openclaw.tar.gz`；也可用 `setup-openclaw.ps1 -ImageArchive "路径"` |
-| **主配置** | 必须是 **`openclaw/openclaw.json`**（映射到容器内 `~/.openclaw/openclaw.json`）。**不能**只放 `openclaw.json5` 而不提供 `openclaw.json`，否则网关认为无配置。 |
-| `defaults/openclaw.default.json` | 首次安装且不存在 `openclaw.json` 时，由 `setup-openclaw.ps1` **复制**为 `openclaw/openclaw.json`；不是运行时读取的别名文件。 |
-| `.env` | `OPENCLAW_IMAGE`、`OPENCLAW_GATEWAY_TOKEN`、端口、API Key 等；**勿提交**（已 `.gitignore`）。 |
-| 数据 | `openclaw/`、`workspace/` 绑定挂载；`docker compose down` **默认不删** 这些目录。 |
+### 离线优先
 
----
+- 默认流程：`docker load` + `docker compose up -d`。
+- 不依赖在线 `docker pull` 作为安装前提。
+- 适配弱网、内网分发、可复用镜像包场景。
 
-## 3. 网关配置（必须满足当前 OpenClaw schema）
+### 稳定优先
 
-- **`gateway.mode`：必须为 `"local"`**（Docker 场景），否则日志反复：`Missing config. Run openclaw setup or set gateway.mode=local`。
-- **根级 `providers`：无效**。自定义 OpenAI 兼容源、OpenRouter 等应放在 **`models.providers`**（并可配 `agents.defaults.model.primary`）；见仓库内 `openclaw/openclaw.json` 示例。
-- **Control UI / 浏览器**：建议在 `gateway.controlUi.allowedOrigins` 中包含 `http://127.0.0.1:18789` 与 `http://localhost:18789`（与[官方 Docker 手动流程](https://docs.openclaw.ai/install/docker)一致）。
-- **`OPENCLAW_GATEWAY_TOKEN`**：必须作为**唯一真源**；`openclaw.json` 里 **`gateway.auth.token` 应为 `${OPENCLAW_GATEWAY_TOKEN}`**（勿在 JSON 里再写另一串硬编码，否则网页显示 Token 无效）。首次安装脚本可自动生成 Token；Control UI 填与 `.env` 相同。
-- **双份 workspace**：Compose 只挂载**仓库根目录的 `workspace/`**。若误存在 **`openclaw/workspace/`**，一般不会挂载进容器，易造成两套状态混淆；保留根目录 `workspace/`，多余目录可备份后删除。
+- 保持与上游 Compose 行为兼容（`docker-compose.yml` 基本对齐上游）。
+- 脚本入口统一，减少手工步骤与环境差异。
+- 关键配置自动校正（端口、token 同步、模式识别）。
 
----
+### 数据安全优先
 
-## 4. 脚本一览
-
-| 脚本 | 作用 |
-|------|------|
-| `setup-openclaw.ps1` / `.bat` | `docker load` → 创建目录/模板 → 补全 `.env` Token（若缺）→ `docker compose up -d`；启动前可按 `.env` 检测 **18789** 是否可能被占用并提示（含 WSL） |
-| `stop-openclaw.ps1` / `.bat` | `docker compose down`；可选 `-RemoveVolumes` |
-| `tui-openclaw.ps1` / `.bat` | `docker compose run ... openclaw-cli tui --deliver`（默认 **delivery**，否则常见仅 `HEARTBEAT_OK`）；见 [TUI 文档](https://docs.openclaw.ai/web/tui)「Sending + delivery」 |
+- `openclaw/`、`workspace/` 为持久数据目录。
+- 常规停止（`docker compose down`）不应删除用户数据。
 
 ---
 
-## 5. CI / OSS（export-image）
+## 2) 操作优先级（协作时请遵守）
 
-- 使用 **ossutil** 的 **v1.7.18**（固定版本）：v1.7.19 在 GitHub Release 上 linux-amd64 zip 曾缺失/404。
-- 解压 zip 后 **`ossutil64` 不一定在解压根目录**：Workflow 用 `find` 定位 `ossutil64` 或 `ossutil` 再 `chmod +x`。
-- Actions Secrets：`OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`、`OSS_ENDPOINT`、`OSS_BUCKET`。
-
----
-
-## 6. 已遇到问题与精确对策
-
-| 现象 | 原因 | 对策 |
-|------|------|------|
-| `chmod: cannot access 'ossutil64'`（CI） | ossutil zip 解压后二进制在子目录 | 已用子目录解压 + `find` 定位可执行文件（见 `export-image.yml`） |
-| `Missing config` / 网关不起 | 仅有 **`openclaw.json5`** 文件名，网关只认 **`openclaw.json`** | 使用 **`openclaw/openclaw.json`** 作为主文件（内容可为 JSON5 语法） |
-| `Unrecognized key: "providers"` | OpenClaw 新版本 schema 不收根级 `providers` | 改为 **`models.providers`** + 必要时的 `agents.defaults` |
-| 浏览器白屏 / 健康检查不通 | 配置未生效或未完成启动 | 确认 `gateway.mode`、`controlUi.allowedOrigins`；用 `curl.exe` 测 `/healthz`（见下） |
-| PowerShell 里 `curl -fsS` 报错 | **`curl` 是 `Invoke-WebRequest` 的别名** | 使用 **`curl.exe -fsS`** 或 **`irm`** |
-| `curl: (7) Could not connect` | 容器在重启循环或未监听 | 先修配置再 `docker compose up -d --force-recreate`；看 `docker compose logs openclaw-gateway` |
-| `stop-openclaw.ps1` 字符串未闭合、乱码 | **UTF-8 无 BOM** 时 PowerShell 5.1 误读中文 | **`stop-openclaw.ps1` 已改为英文输出**；若其他 `.ps1` 需中文，建议 **UTF-8 带 BOM** 保存 |
-| 本机 Windows Docker 与 WSL 各跑一套 | 同端口 **18789** 冲突 | 停其一或改 `.env` 的 `OPENCLAW_GATEWAY_PORT`（并保证 `openclaw.json` 中网关相关一致） |
-| `docker compose pull` 很慢 | 预期行为 | 本仓库以离线 `docker load` 为主，避免长链路拉取 |
+1. **先保离线可安装**：任何改动不能破坏离线镜像安装链路。
+2. **再保可启动可探活**：`/healthz` 能通、Control UI 可访问。
+3. **再谈功能增强**：with-python、TUI、OSS 上传等属于增强项。
+4. **最后做美化**：排版、提示文案不应影响主流程。
 
 ---
 
-## 7. 健康检查与 TUI
+## 3) 关键文件与事实
 
-- 探活：`curl.exe -fsS http://127.0.0.1:18789/healthz`（端口以 `.env` 为准）。
-- TUI：`docker compose run --rm -it openclaw-cli tui`
+| 路径 | 作用 | 硬性约束 |
+|---|---|---|
+| `openclaw/openclaw.json` | 主配置文件 | 必须存在；不能仅有 `openclaw.json5` 文件名 |
+| `.env` | 镜像名、端口、token、API Key | 不提交仓库（已忽略） |
+| `defaults/openclaw.default.json` | 首次安装的配置模板 | 安装时复制成 `openclaw/openclaw.json` |
+| `images/openclaw.tar.gz` / `openclaw.tar.gz` | 离线镜像包 | 安装脚本默认从这两处查找 |
+| `workspace/` | 挂载工作区 | Compose 挂载的是根目录 `workspace/` |
 
 ---
 
-## 8. 外部文档
+## 4) 网关配置红线
 
-- OpenClaw Docker：<https://docs.openclaw.ai/install/docker>  
+- `gateway.mode` 必须是 `"local"`（Docker 场景）。
+- 根级 `providers` 无效；应使用 `models.providers`。
+- `OPENCLAW_GATEWAY_TOKEN` 使用“反向同步”：
+  - 从 `openclaw/openclaw.json` 读取 `gateway.auth.token`
+  - 回写 `.env` 的 `OPENCLAW_GATEWAY_TOKEN`
+  - 避免改写 `openclaw.json` 排版
+- `gateway.controlUi.allowedOrigins` 建议包含：
+  - `http://127.0.0.1:18789`
+  - `http://localhost:18789`
+
+---
+
+## 5) 脚本入口映射（统一走这些）
+
+| 入口 | 用途 |
+|---|---|
+| `setup-openclaw.bat` | 安装（默认 with-python，倒计时可切换） |
+| `restart-openclaw.bat` | 重启（自动判断模式） |
+| `stop-openclaw.bat` | 停止（自动判断模式） |
+| `tui-openclaw.bat` / `tui-openclaw.ps1` | 进入 TUI（默认 `--deliver`） |
+
+内部实现：
+
+- `scripts/tools/setup-openclaw.ps1`
+- `scripts/tools/restart-openclaw.ps1`
+- `scripts/tools/stop-openclaw.ps1`
+- `scripts/openclaw-ports.ps1`
+- `scripts/openclaw-token.ps1`
+
+---
+
+## 6) 常见故障速查（离线部署高频）
+
+| 现象 | 首查点 | 快速处理 |
+|---|---|---|
+| `Missing config` / 网关不起 | 是否只有 `openclaw.json5` | 确保存在 `openclaw/openclaw.json` |
+| `Unrecognized key: "providers"` | 配置层级错误 | 改到 `models.providers` |
+| 浏览器白屏 / healthz 不通 | 端口与 `gateway.mode` | 先测 `curl.exe -fsS http://127.0.0.1:18789/healthz` |
+| PowerShell 下 `curl -fsS` 报错 | 别名冲突 | 用 `curl.exe` 或 `irm` |
+| `.ps1` 出现中文相关假语法错误 | 编码问题（PS 5.1） | 脚本文案尽量英文；中文请 UTF-8 BOM；或用 PS7 |
+| with-python 启动 unhealthy | 入口脚本/权限/LF 行尾 | 检查 `entrypoint-python.sh`、volume 权限、LF |
+
+---
+
+## 7) CI 与离线包分发（可选）
+
+- 镜像导出：`.github/workflows/export-image.yml`
+- 可选上传 OSS（用于内网分发）
+- 关键注意：
+  - `ossutil` 固定使用可用版本（当前为 v1.7.18）
+  - 解压后可执行文件路径可能在子目录，需定位后再执行
+
+---
+
+## 8) 验收最小清单（改动后自检）
+
+- 能从离线包完成安装（不依赖在线 pull）。
+- `docker compose up -d` 后网关可探活。
+- `README.md` 的新手快速上手路径仍然可用。
+- 未破坏 `setup/restart/stop` 三个统一入口。
+
+---
+
+## 9) 参考链接
+
+- OpenClaw Docker：<https://docs.openclaw.ai/install/docker>
 - 上游 compose：<https://github.com/openclaw/openclaw/blob/main/docker-compose.yml>
 
 ---
 
-*若修改行为与本文冲突，以仓库内 `README.md`、`docker-compose.yml` 与脚本实行为准。*
+若与实现细节冲突，以 `README.md`、`docker-compose.yml` 与脚本实际行为为准。
