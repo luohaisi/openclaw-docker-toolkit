@@ -55,6 +55,8 @@ docker compose down
 
 `setup-openclaw.bat` 已合并模式选择：启动后 10 秒倒计时，默认 **with-python**；也可选择 **without-python**。
 
+> `with-python` 模式使用仓库根目录的 `python-standalone/` 作为母版来源。该目录是**用户本地下载并解压**的运行时资源，已在 `.gitignore` 中忽略，不会提交到仓库。
+
 1. 双击 **`setup-openclaw.bat`**，或：
 
    ```powershell

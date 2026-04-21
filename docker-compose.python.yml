@@ -1,0 +1,45 @@
+services:
+  openclaw-python-seed:
+    image: ${OPENCLAW_IMAGE:-ghcr.io/openclaw/openclaw:2026.4.15-slim}
+    user: "0:0"
+    restart: "no"
+    volumes:
+      - ./python-standalone:/opt/python-src:ro
+      - openclaw-python:/opt/python
+    command:
+      [
+        "sh",
+        "-ec",
+        "if [ -x /opt/python/bin/python3 ] && [ -f /opt/python/.ready ]; then mkdir -p /opt/python/etc; printf '[global]\nindex-url = https://pypi.tuna.tsinghua.edu.cn/simple\ntrusted-host = pypi.tuna.tsinghua.edu.cn\n' > /opt/python/etc/pip.conf; echo 'Python volume already ready (pip.conf normalized)'; exit 0; fi; if [ ! -x /opt/python-src/bin/python3 ] && [ ! -x /opt/python-src/bin/python3.12 ]; then echo 'Missing python source binary under /opt/python-src/bin' >&2; exit 1; fi; rm -rf /opt/python/*; cp -a /opt/python-src/. /opt/python/; if [ ! -x /opt/python/bin/python3 ] && [ -x /opt/python/bin/python3.12 ]; then ln -sf python3.12 /opt/python/bin/python3; fi; mkdir -p /opt/python/etc; printf '[global]\nindex-url = https://pypi.tuna.tsinghua.edu.cn/simple\ntrusted-host = pypi.tuna.tsinghua.edu.cn\n' > /opt/python/etc/pip.conf; chmod -R a+rx /opt/python/bin || true; touch /opt/python/.ready; chown -R 1000:1000 /opt/python || true; echo 'Python volume initialized'",
+      ]
+
+  openclaw-gateway:
+    volumes:
+      - openclaw-python:/opt/python
+    environment:
+      PATH: /opt/python/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      PYTHON_PATH: /opt/python/bin/python3
+      PIP_CONFIG_FILE: /opt/python/etc/pip.conf
+      PIP_INDEX_URL: https://pypi.tuna.tsinghua.edu.cn/simple
+      PIP_TRUSTED_HOST: pypi.tuna.tsinghua.edu.cn
+    depends_on:
+      openclaw-python-seed:
+        condition: service_completed_successfully
+
+  openclaw-cli:
+    volumes:
+      - openclaw-python:/opt/python
+    environment:
+      PATH: /opt/python/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      PYTHON_PATH: /opt/python/bin/python3
+      PIP_CONFIG_FILE: /opt/python/etc/pip.conf
+      PIP_INDEX_URL: https://pypi.tuna.tsinghua.edu.cn/simple
+      PIP_TRUSTED_HOST: pypi.tuna.tsinghua.edu.cn
+    depends_on:
+      openclaw-python-seed:
+        condition: service_completed_successfully
+      openclaw-gateway:
+        condition: service_healthy
+
+volumes:
+  openclaw-python:

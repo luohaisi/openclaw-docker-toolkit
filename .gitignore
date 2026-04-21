@@ -5,3 +5,22 @@ scripts/oss-local.env
 images/*.tar
 images/*.tar.gz
 images/*.tgz
+
+# Local standalone Python seed (user downloaded/extracted, not repository source)
+python-standalone/
+
+# Runtime/generated OpenClaw state
+openclaw/agents/
+openclaw/canvas/
+openclaw/devices/
+openclaw/identity/
+openclaw/logs/
+openclaw/memory/
+openclaw/tasks/
+openclaw/update-check.json
+openclaw/exec-approvals.json
+openclaw/openclaw.json.bak*
+openclaw/openclaw.json.clobbered.*
+
+# Local workspace runtime data
+workspace/

@@ -1,7 +1,9 @@
 ﻿#Requires -Version 5.1
 # 仅使用本地离线包（.tar.gz / .tar），不执行 docker pull。
 param(
-    [string]$ImageArchive = ''
+    [string]$ImageArchive = '',
+    # Used by setup-openclaw-with-python.ps1: prepare image/env/config but do not start; caller runs compose with python overlay in one shot (avoids openclaw-cli network_mode race).
+    [switch]$SkipComposeUp
 )
 
 $ErrorActionPreference = 'Stop'
@@ -155,23 +157,6 @@ function Set-EnvGatewayTokenIfMissing {
     return $token
 }
 
-function Test-LocalPortLikelyInUse {
-    param([int]$Port)
-    # 本机进程监听
-    try {
-        $listen = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue
-        if ($listen) { return @{ Ok = $false; Detail = '本机已有进程在监听该端口' } }
-    } catch {}
-    # WSL 等场景下监听不一定出现在上面，但 localhost 已能连通时常表示被占用
-    try {
-        $tn = Test-NetConnection -ComputerName 127.0.0.1 -Port $Port -WarningAction SilentlyContinue -InformationLevel Quiet -ErrorAction SilentlyContinue
-        if ($tn -and $tn.TcpTestSucceeded) {
-            return @{ Ok = $false; Detail = '127.0.0.1 上该端口可连通（常见于 WSL 或其它环境已占用同端口）' }
-        }
-    } catch {}
-    return @{ Ok = $true; Detail = '' }
-}
-
 Write-Step '检查 Docker'
 Test-DockerReady
 
@@ -237,24 +222,35 @@ if (-not (Test-Path -LiteralPath $configFile)) {
     Write-Host '已存在 openclaw\openclaw.json，跳过。' -ForegroundColor DarkGray
 }
 
-$composeFile = Join-Path $Root 'docker-compose.yml'
-$gwPort = Get-GatewayPort -EnvPath $envFile
-$portCheck = Test-LocalPortLikelyInUse -Port $gwPort
-if (-not $portCheck.Ok) {
-    Write-Host ''
-    Write-Host "提醒: 网关端口 ${gwPort} 可能已被占用（$($portCheck.Detail)）。" -ForegroundColor Yellow
-    Write-Host '若 WSL 里已在跑 OpenClaw 或其它程序占用该端口，请先停止对应服务，或编辑 .env 把 OPENCLAW_GATEWAY_PORT（及 openclaw.json 中网关端口如需一致）改为其它端口后再运行。' -ForegroundColor Yellow
-    Write-Host ''
+$tokenSyncScript = Join-Path $Root 'scripts\openclaw-token.ps1'
+if (Test-Path -LiteralPath $tokenSyncScript) {
+    . $tokenSyncScript
+    $null = Sync-OpenClawGatewayToken -Root $Root
 }
 
-Write-Step '启动容器'
-& docker compose -f $composeFile up -d
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$composeFile = Join-Path $Root 'docker-compose.yml'
+$gwPort = Get-GatewayPort -EnvPath $envFile
+$portsScript = Join-Path $Root 'scripts\openclaw-ports.ps1'
+if (Test-Path -LiteralPath $portsScript) {
+    . $portsScript
+    $portResult = Invoke-OpenClawPortAutoResolve -Root $Root -ComposeArguments @('-f', $composeFile)
+    if ($null -ne $portResult -and $null -ne $portResult.GatewayPort) {
+        $gwPort = $portResult.GatewayPort
+    }
+}
 
-Write-Step '状态'
-& docker compose -f $composeFile ps
+if (-not $SkipComposeUp) {
+    Write-Step '启动容器'
+    & docker compose -f $composeFile up -d
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-Write-Host ''
-Write-Host "完成。Control UI: http://127.0.0.1:${gwPort}/" -ForegroundColor Green
-Write-Host '日志: docker compose logs -f openclaw-gateway' -ForegroundColor DarkGray
-Write-Host '说明: 容器由 Docker 在后台运行，关掉本窗口不会停止服务；停止请执行: docker compose down（或退出 Docker Desktop）。' -ForegroundColor DarkGray
+    Write-Step '状态'
+    & docker compose -f $composeFile ps
+
+    Write-Host ''
+    Write-Host "完成。Control UI: http://127.0.0.1:${gwPort}/" -ForegroundColor Green
+    Write-Host '日志: docker compose logs -f openclaw-gateway' -ForegroundColor DarkGray
+    Write-Host '说明: 容器由 Docker 在后台运行，关掉本窗口不会停止服务；停止请执行: docker compose down（或退出 Docker Desktop）。' -ForegroundColor DarkGray
+} else {
+    Write-Host 'SkipComposeUp: 已跳过 docker compose up，由调用方用叠加编排一次性启动。' -ForegroundColor DarkGray
+}
