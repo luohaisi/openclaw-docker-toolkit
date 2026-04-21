@@ -200,6 +200,31 @@ Control UI：<http://127.0.0.1:18789/>
 
 - 修改 `.env` 中 `OPENCLAW_GATEWAY_PORT` / `OPENCLAW_BRIDGE_PORT`。
 
+### 同机多开注意事项（2 开、3 开或更多）
+
+- 推荐目录命名示例（同级目录）：
+  - `E:\Workspace\openclaw-a`
+  - `E:\Workspace\openclaw-b`
+  - `E:\Workspace\openclaw-c`
+  - 建议每个目录内都保留一份独立 `.env` 与 `openclaw/openclaw.json`。
+- 推荐端口对应示例：
+  - `openclaw-a`：`18789/18790`
+  - `openclaw-b`：`18791/18792`
+  - `openclaw-c`：`18793/18794`
+- 每个实例使用**独立目录**运行，不要在 A 目录管理 B 实例。
+- 每个实例使用**唯一端口对**：
+  - 例如 A: `18789/18790`，B: `18791/18792`，C: `18793/18794`（按 `+2` 递增）。
+- 每个实例使用**独立 token**（`OPENCLAW_GATEWAY_TOKEN` 不能复用）。
+- 每个实例分别执行自己的 `setup/restart/stop`，避免跨目录操作。
+- 访问地址按网关端口区分：
+  - `http://127.0.0.1:<OPENCLAW_GATEWAY_PORT>`
+- 快速查看本机所有实例与端口映射：
+  - `docker ps --format "table {{.Names}}\t{{.Ports}}\t{{.Status}}"`
+- 若出现“能连端口但页面异常/未授权”，优先检查：
+  1. 是否访问了错误实例的端口；
+  2. 当前目录与目标实例是否一致；
+  3. token 是否与该实例 `.env` 一致。
+
 </details>
 
 ## 许可
