@@ -100,6 +100,9 @@ docker compose down
 
 5. 编辑 **`.env`**：
    - 填写模型 API 等配置。
+   - **必须手动填入你自己的 API Key**（例如 `OPENROUTER_API_KEY` / 其它你启用的 provider key）。
+   - 若 API Key 为空或无效，常见现象是终端显示服务已启动，但网页打不开，且通常不会主动报明确错误。
+   - 首次启动或重启后，通常还需要等待数秒，网页才会正常显示。
    - 把 **`OPENCLAW_IMAGE=`** 改成脚本输出的「已加载」镜像名。
    - 若 **`OPENCLAW_GATEWAY_TOKEN`** 为空（含模板里被注释那一行），一键脚本会自动生成：
      - 字符集仅字母、数字、连字符 `-`（避免 `+`/`=` 被误截断）
@@ -194,7 +197,10 @@ Control UI：<http://127.0.0.1:18789/>
 
 ### 设备/API
 
-- 见[官方文档](https://docs.openclaw.ai/)。
+- 先确认 `.env` 已填写你自己的 provider API Key（如 `OPENROUTER_API_KEY`）。
+- 未填写时常见现象是：终端显示服务已启动，但网页打不开，且日志不一定直观报错。
+- 服务启动后通常需要等待数秒，再访问网页更稳定。
+- 其他设备/API 说明见[官方文档](https://docs.openclaw.ai/)。
 
 ### 端口冲突
 
