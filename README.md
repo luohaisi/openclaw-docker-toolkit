@@ -2,6 +2,15 @@
 
 在 Docker 中运行 [OpenClaw](https://github.com/openclaw/openclaw) Gateway，`docker-compose.yml` 与[上游](https://github.com/openclaw/openclaw/blob/main/docker-compose.yml)对齐。官方文档：[Docker（中文）](https://docs.openclaw.ai/zh-CN/install/docker)。
 
+## 项目初衷（先看这个）
+
+这个项目首先是为了解决**国内网络环境不稳定、拉取镜像慢或经常失败**的问题。  
+因此默认采用**离线优先**方案：
+
+- 在网络条件好的环境预先制作离线镜像包
+- 部署机器只需要 `docker load` + `docker compose up -d`
+- 尽量避免把在线 `docker pull` 作为安装前提
+
 ## 新手快速上手（3 步）
 
 1. 安装并启动 **Docker Desktop**。
@@ -49,13 +58,17 @@ docker compose down
 ## 进阶说明（展开查看）
 
 <details>
-<summary>安装模式、.env 细节、故障排查、TUI、Skills 路径</summary>
+<summary>安装模式、离线镜像制作、.env 细节、故障排查、TUI、Skills 路径</summary>
 
 ### 统一安装入口（含 Python 方案）
 
 `setup-openclaw.bat` 已合并模式选择：启动后 10 秒倒计时，默认 **with-python**；也可选择 **without-python**。
 
-> `with-python` 模式使用仓库根目录的 `python-standalone/` 作为母版来源。该目录是**用户本地下载并解压**的运行时资源，已在 `.gitignore` 中忽略，不会提交到仓库。
+> `with-python` 模式使用仓库根目录的 `python-standalone/` 作为母版来源。该目录是用户本地下载并解压的运行时资源，已在 `.gitignore` 中忽略，不会提交到仓库。
+>
+> `python-standalone` 下载来源：[`indygreg/python-build-standalone` Releases](https://github.com/indygreg/python-build-standalone/releases)  
+> 本仓库历史上使用过的示例包：`cpython-3.12.10+20250409-x86_64_v3-unknown-linux-gnu-install_only.tar.gz`  
+> 下载后请解压到仓库根目录 `python-standalone/`（目录内应能看到 `bin/`、`lib/`、`include/`）。
 
 1. 双击 **`setup-openclaw.bat`**，或：
 
@@ -123,6 +136,35 @@ docker compose up -d
 ## 导出离线包并上传 OSS（可选）
 
 仓库提供 [`.github/workflows/export-image.yml`](.github/workflows/export-image.yml)：在 Actions 中配置 Secrets `OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`、`OSS_ENDPOINT`、`OSS_BUCKET`，手动运行 workflow 后从日志取 OSS 下载链接。本地验证上传见 `scripts/oss-local.env.example`。
+
+### 用 `export-image.yml` 制作离线镜像（推荐）
+
+适用场景：在一台能稳定访问镜像源的机器上打包，再分发到内网/弱网机器安装。
+
+1. 打开 GitHub Actions，运行 `OpenClaw Docker 镜像导出`。
+2. 填写输入参数（对应 `workflow_dispatch`）：
+   - `image`：镜像名，默认 `ghcr.io/openclaw/openclaw`
+   - `tag`：镜像标签，默认 `2026.4.15-slim`
+3. Workflow 会自动执行：
+   - `docker pull <image>:<tag>`
+   - `docker save <image>:<tag> -o openclaw.tar`
+   - `gzip openclaw.tar`，生成 `openclaw.tar.gz`
+4. 若配置了 OSS Secrets，会继续上传到阿里云 OSS：
+   - `OSS_ACCESS_KEY_ID`
+   - `OSS_ACCESS_KEY_SECRET`
+   - `OSS_ENDPOINT`
+   - `OSS_BUCKET`
+   - 上传路径格式：`docker-images/openclaw-<tag>.tar.gz`
+5. 即使不走 OSS，也可在 Actions 的 artifact 下载 `openclaw.tar.gz`（工作流默认保留 5 天）。
+
+> 当前 workflow 固定使用 `ossutil v1.7.18`，是为了避开 `v1.7.19` 在 GitHub Release 上可能出现的 linux-amd64 包缺失问题。
+
+### 离线包落地到部署机
+
+- 将导出的 `openclaw.tar.gz` 拷贝到部署仓库：
+  - `images/openclaw.tar.gz`，或
+  - 仓库根目录 `openclaw.tar.gz`
+- 然后按“新手快速上手（3 步）”执行安装。
 
 ### 常用命令（完整）
 
