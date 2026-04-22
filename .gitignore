@@ -21,6 +21,7 @@ openclaw/update-check.json
 openclaw/exec-approvals.json
 openclaw/openclaw.json.bak*
 openclaw/openclaw.json.clobbered.*
+openclaw/openclaw.json
 
 # Local workspace runtime data
 workspace/

@@ -1,0 +1,2 @@
+# Shell scripts must use LF so Linux containers do not see CRLF (^M) and fail entrypoint.
+*.sh text eol=lf
